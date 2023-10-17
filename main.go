@@ -1,18 +1,27 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"os"
 	"tinycompiler/lexer"
+	"tinycompiler/parser"
 )
 
 func main() {
-	source := "IF+-123 foo*THEN/"
-	l := lexer.NewLexer(source)
-
-	token := lexer.GetToken(l)
-
-	for token.TokenType != lexer.EOF {
-		fmt.Println(token.TokenType)
-		token = lexer.GetToken(l)
+	if len(os.Args) < 2 {
+		log.Fatalln("Missing parameter, please provide filename.")
+		return
 	}
+
+	data, err := os.ReadFile(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+
+	contents := string(data)
+
+	l := lexer.NewLexer(contents)
+	p := parser.NewParser(l)
+
+	parser.Program(p)
 }

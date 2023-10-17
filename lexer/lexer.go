@@ -226,3 +226,68 @@ func isKeyword(word string) TokenType {
 
 	return UNKNOWN
 }
+
+// Util function
+
+func TokenTypeName(tokenType TokenType) string {
+	switch tokenType {
+	case EOF:
+		return "EOF"
+	case NEWLINE:
+		return "NEWLINE"
+	case NUMBER:
+		return "NUMBER"
+	case IDENT:
+		return "IDENT"
+	case STRING:
+		return "STRING"
+	case LABEL:
+		return "LABEL"
+	case GOTO:
+		return "GOTO"
+	case PRINT:
+		return "PRINT"
+	case INPUT:
+		return "INPUT"
+	case LET:
+		return "LET"
+	case IF:
+		return "IF"
+	case THEN:
+		return "THEN"
+	case ENDIF:
+		return "ENDIF"
+	case WHILE:
+		return "WHILE"
+	case REPEAT:
+		return "REPEAT"
+	case ENDWHILE:
+		return "ENDWHILE"
+	case EQ:
+		return "EQ"
+	case PLUS:
+		return "PLUS"
+	case MINUS:
+		return "MINUS"
+	case ASTERISK:
+		return "ASTERISK"
+	case SLASH:
+		return "SLASH"
+	case EQEQ:
+		return "EQEQ"
+	case NOTEQ:
+		return "NOTEQ"
+	case LT:
+		return "LT"
+	case LTEQ:
+		return "LTEQ"
+	case GT:
+		return "GT"
+	case GTEQ:
+		return "GTEQ"
+	case UNKNOWN:
+		return "UNKNOWN"
+	default:
+		return "Invalid TokenType"
+	}
+}
