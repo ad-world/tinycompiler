@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
+	"tinycompiler/emitter"
 	"tinycompiler/lexer"
 	"tinycompiler/parser"
 )
@@ -12,16 +14,23 @@ func main() {
 		log.Fatalln("Missing parameter, please provide filename.")
 		return
 	}
-
-	data, err := os.ReadFile(os.Args[1])
+	filename := os.Args[1]
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}
 
+	splitFileName := strings.Split(filename, "/")
+	lastToken := splitFileName[len(splitFileName)-1]
+	splitLastToken := strings.Split(lastToken, ".")
+	resultingFilename := splitLastToken[0]
+
 	contents := string(data)
 
 	l := lexer.NewLexer(contents)
-	p := parser.NewParser(l)
+	e := emitter.NewEmitter("results/" + resultingFilename + ".c")
+	p := parser.NewParser(l, e)
 
 	parser.Program(p)
+	emitter.WriteFile(e)
 }

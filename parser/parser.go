@@ -1,8 +1,8 @@
 package parser
 
 import (
-	"fmt"
 	"log"
+	"tinycompiler/emitter"
 	"tinycompiler/lexer"
 )
 
@@ -10,17 +10,19 @@ type Parser struct {
 	Symbols        map[string]bool
 	LabelsDeclared map[string]bool
 	LabelsGotoed   map[string]bool
+	emitter        *emitter.Emitter
 	lexer          *lexer.Lexer
 	CurToken       lexer.Token
 	PeekToken      lexer.Token
 }
 
-func NewParser(l *lexer.Lexer) *Parser {
+func NewParser(l *lexer.Lexer, e *emitter.Emitter) *Parser {
 	parser := &Parser{
 		Symbols:        make(map[string]bool),
 		LabelsDeclared: make(map[string]bool),
 		LabelsGotoed:   make(map[string]bool),
 		lexer:          l,
+		emitter:        e,
 		CurToken: lexer.Token{
 			TokenType: lexer.UNKNOWN,
 		},
@@ -62,7 +64,8 @@ func Abort(p *Parser, message string) {
 // The following functions are language parsers
 
 func Program(p *Parser) {
-	fmt.Println("PROGRAM")
+	emitter.HeaderLine(p.emitter, "#include <stdio.h>")
+	emitter.HeaderLine(p.emitter, "int main(void) {")
 
 	for CheckToken(p, lexer.NEWLINE) {
 		NextToken(p)
@@ -71,6 +74,9 @@ func Program(p *Parser) {
 	for !CheckToken(p, lexer.EOF) {
 		Statement(p)
 	}
+
+	emitter.EmitLine(p.emitter, "return 0;")
+	emitter.EmitLine(p.emitter, "}")
 
 	for label := range p.LabelsGotoed {
 		_, ok := p.LabelsDeclared[label]
@@ -83,41 +89,46 @@ func Program(p *Parser) {
 
 func Statement(p *Parser) {
 	if CheckToken(p, lexer.PRINT) {
-		fmt.Println("STATEMENT-PRINT")
 		NextToken(p)
 
 		if CheckToken(p, lexer.STRING) {
+			emitter.EmitLine(p.emitter, "printf(\""+p.CurToken.TokenText+"\\n\");")
 			NextToken(p)
 		} else {
+			emitter.Emit(p.emitter, "printf(\"%"+".2f\\n\", (float)(")
 			Expression(p)
+			emitter.EmitLine(p.emitter, "));")
 		}
 	} else if CheckToken(p, lexer.IF) {
-		fmt.Println("STATEMENT-IF")
 		NextToken(p)
+		emitter.Emit(p.emitter, "if(")
 
 		Comparison(p)
 		Match(p, lexer.THEN)
 		Newline(p)
+		emitter.EmitLine(p.emitter, "){")
 
 		for !CheckToken(p, lexer.ENDIF) {
 			Statement(p)
 		}
 
 		Match(p, lexer.ENDIF)
+		emitter.EmitLine(p.emitter, "}")
 	} else if CheckToken(p, lexer.WHILE) {
-		fmt.Println("STATEMENT-WHILE")
 		NextToken(p)
+		emitter.Emit(p.emitter, "while(")
 		Comparison(p)
 		Match(p, lexer.REPEAT)
 		Newline(p)
+		emitter.EmitLine(p.emitter, "){")
 
 		for !CheckToken(p, lexer.ENDWHILE) {
 			Statement(p)
 		}
 
 		Match(p, lexer.ENDWHILE)
+		emitter.EmitLine(p.emitter, "}")
 	} else if CheckToken(p, lexer.LABEL) {
-		fmt.Println("STATEMENT-LABEL")
 		NextToken(p)
 
 		if p.LabelsDeclared[p.CurToken.TokenText] {
@@ -125,34 +136,42 @@ func Statement(p *Parser) {
 		}
 
 		p.LabelsDeclared[p.CurToken.TokenText] = true
+		emitter.EmitLine(p.emitter, p.CurToken.TokenText+":")
 
 		Match(p, lexer.IDENT)
 	} else if CheckToken(p, lexer.GOTO) {
-		fmt.Println("STATEMENT-GOTO")
 		NextToken(p)
 		p.LabelsGotoed[p.CurToken.TokenText] = true
+		emitter.EmitLine(p.emitter, "goto "+p.CurToken.TokenText+";")
 		Match(p, lexer.IDENT)
 	} else if CheckToken(p, lexer.LET) {
-		fmt.Println("STATEMENT-LET")
 		NextToken(p)
 
 		_, ok := p.Symbols[p.CurToken.TokenText]
 		if ok == false {
 			p.Symbols[p.CurToken.TokenText] = true
+			emitter.HeaderLine(p.emitter, "float "+p.CurToken.TokenText+";")
 		}
 
+		emitter.Emit(p.emitter, p.CurToken.TokenText+" = ")
 		Match(p, lexer.IDENT)
 		Match(p, lexer.EQ)
 		Expression(p)
+		emitter.EmitLine(p.emitter, ";")
 	} else if CheckToken(p, lexer.INPUT) {
-		fmt.Println("STATEMENT-INPUT")
 		NextToken(p)
 
 		_, ok := p.Symbols[p.CurToken.TokenText]
 		if ok == false {
 			p.Symbols[p.CurToken.TokenText] = true
+			emitter.HeaderLine(p.emitter, "float "+p.CurToken.TokenText+";")
 		}
 
+		emitter.EmitLine(p.emitter, "if(0 == scanf(\"%"+"f\", &"+p.CurToken.TokenText+")) {")
+		emitter.EmitLine(p.emitter, p.CurToken.TokenText+" = 0;")
+		emitter.Emit(p.emitter, "scanf(\"%")
+		emitter.EmitLine(p.emitter, "*s\");")
+		emitter.EmitLine(p.emitter, "}")
 		Match(p, lexer.IDENT)
 	} else {
 		Abort(p, "Invalid statement at "+p.CurToken.TokenText+" ("+lexer.TokenTypeName(p.CurToken.TokenType)+")")
@@ -161,7 +180,6 @@ func Statement(p *Parser) {
 }
 
 func Newline(p *Parser) {
-	fmt.Println("NEWLINE")
 	Match(p, lexer.NEWLINE)
 
 	for CheckToken(p, lexer.NEWLINE) {
@@ -170,11 +188,10 @@ func Newline(p *Parser) {
 }
 
 func Comparison(p *Parser) {
-	fmt.Println("COMPARISON")
-
 	Expression(p)
 
 	if IsComparisonOperator(p) {
+		emitter.Emit(p.emitter, p.CurToken.TokenText)
 		NextToken(p)
 		Expression(p)
 	} else {
@@ -182,6 +199,7 @@ func Comparison(p *Parser) {
 	}
 
 	for IsComparisonOperator(p) {
+		emitter.Emit(p.emitter, p.CurToken.TokenText)
 		NextToken(p)
 		Expression(p)
 	}
@@ -197,44 +215,42 @@ func IsComparisonOperator(p *Parser) bool {
 }
 
 func Expression(p *Parser) {
-	fmt.Println("EXPRESSION")
-
 	Term(p)
 	for CheckToken(p, lexer.PLUS) || CheckToken(p, lexer.MINUS) {
+		emitter.Emit(p.emitter, p.CurToken.TokenText)
 		NextToken(p)
 		Term(p)
 	}
 }
 
 func Term(p *Parser) {
-	fmt.Println("TERM")
 	Unary(p)
 
 	for CheckToken(p, lexer.SLASH) || CheckToken(p, lexer.ASTERISK) {
+		emitter.Emit(p.emitter, p.CurToken.TokenText)
 		NextToken(p)
 		Unary(p)
 	}
 }
 
 func Unary(p *Parser) {
-	fmt.Println("UNARY")
-
 	if CheckToken(p, lexer.PLUS) || CheckToken(p, lexer.MINUS) {
+		emitter.Emit(p.emitter, p.CurToken.TokenText)
 		NextToken(p)
 	}
 	Primary(p)
 }
 
 func Primary(p *Parser) {
-	fmt.Println("PRIMARY (" + p.CurToken.TokenText + ")")
-
 	if CheckToken(p, lexer.NUMBER) {
+		emitter.Emit(p.emitter, p.CurToken.TokenText)
 		NextToken(p)
 	} else if CheckToken(p, lexer.IDENT) {
 		_, ok := p.Symbols[p.CurToken.TokenText]
 		if ok == false {
 			Abort(p, "Referencing variable before assignment: "+p.CurToken.TokenText)
 		}
+		emitter.Emit(p.emitter, p.CurToken.TokenText)
 		NextToken(p)
 	} else {
 		Abort(p, "Unexpected token at "+p.CurToken.TokenText)
